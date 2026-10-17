@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: minebeacon
+      POSTGRES_PASSWORD: minebeacon
+      POSTGRES_DB: minebeacon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minebeacon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8096}:${APP_PORT:-8096}"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://minebeacon:minebeacon@db:5432/minebeacon?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: "${APP_PORT:-8096}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${APP_PORT:-8096}/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+volumes:
+  pgdata:
+  redisdata:

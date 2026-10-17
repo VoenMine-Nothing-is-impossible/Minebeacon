@@ -1,0 +1,2 @@
+// prisma/migrations placeholder — реальные миграции создаются командой prisma migrate.
+// Файл нужен чтобы дерево проекта было полным.

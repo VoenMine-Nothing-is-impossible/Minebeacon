@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum Edition {
+  JAVA
+  BEDROCK
+  BOTH
+}
+
+enum AccessType {
+  PUBLIC
+  PRIVATE
+}
+
+enum AppStatus {
+  pending
+  approved
+  rejected
+}
+
+model User {
+  id               String    @id @default(cuid())
+  login            String    @unique
+  email            String    @unique
+  passwordHash     String?
+  role             Role      @default(user)
+  blocked          Boolean   @default(false)
+  mustChangePass   Boolean   @default(false)
+  emailVerified    Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  accounts         LinkedAccount[]
+  sessions         Session[]
+  servers          Server[]
+  votes            Vote[]
+  applications     WhitelistApplication[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  emailVerifies    EmailVerify[]
+  passwordResets   PasswordReset[]
+}
+
+model LinkedAccount {
+  id         String @id @default(cuid())
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   String // google | github | telegram
+  providerId String
+  email      String?
+  createdAt  DateTime @default(now())
+  @@unique([provider, providerId])
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+}
+
+model Server {
+  id            String     @id @default(cuid())
+  ownerId       String
+  owner         User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name          String
+  shortDesc     String     @default("")
+  descriptionMd String     @default("") @db.Text
+  descriptionHtml String   @default("") @db.Text
+  logoUrl       String?
+  bannerUrl     String?
+  host          String
+  port          Int        @default(25565)
+  bedrockPort   Int?
+  edition       Edition    @default(JAVA)
+  version       String     @default("")
+  tags          String[]   @default([])
+  language      String     @default("ru")
+  country       String     @default("")
+  website       String?
+  discord       String?
+  telegram      String?
+  vk            String?
+  access        AccessType @default(PUBLIC)
+  joinRules     String     @default("") @db.Text
+  whitelistQs   Json?      // string[]
+  hidden        Boolean    @default(false)
+  featured      Boolean    @default(false)
+  verified      Boolean    @default(false)
+  online        Boolean    @default(false)
+  playersOnline Int        @default(0)
+  playersMax    Int        @default(0)
+  motd          String     @default("")
+  pingVersion   String     @default("")
+  lastPingAt    DateTime?
+  votesTotal    Int        @default(0)
+  votesMonth    Int        @default(0)
+  votesMonthKey String     @default("")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  votes         Vote[]
+  applications  WhitelistApplication[]
+  @@index([ownerId])
+  @@index([hidden, featured])
+  @@index([votesMonth, votesTotal])
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+  monthKey  String   @default("")
+  blocked   Boolean  @default(false)
+  @@index([serverId, createdAt])
+  @@index([userId, serverId, createdAt])
+}
+
+model WhitelistApplication {
+  id        String    @id @default(cuid())
+  serverId  String
+  server    Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nick      String
+  age       Int?
+  contact   String    @default("")
+  answers   Json?     // string[]
+  message   String    @default("") @db.Text
+  status    AppStatus @default(pending)
+  comment   String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  @@index([serverId, status])
+  @@index([userId, serverId])
+}
+
+model Setting {
+  key       String @id
+  valueEnc  String @db.Text // AES-GCM JSON {iv,tag,data} или plain для не-секретов
+  secret    Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String   @default("")
+  entityId  String   @default("")
+  meta      Json?
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+  @@index([action, createdAt])
+}
+
+model EmailQueue {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  body      String   @db.Text
+  attempts  Int      @default(0)
+  lastError String   @default("")
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+  @@index([sentAt, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  @@index([userId, read])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model EmailVerify {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
